@@ -1,0 +1,27 @@
+Package: canopymap
+Title: Map Nodes and Their Connections
+Version: 0.1.0
+Authors@R: c(
+    person("Nico", "Hawley-Weld", role = c("aut", "cre")),
+    person("Claude", "Sonnet 4.6", role = "ctb"))
+Description: Creates interactive Leaflet maps of organizations with optional
+    routing connections between nearest neighbors. Supports data from Google
+    Sheets or local data frames, with configurable column names for use with
+    any dataset.
+License: MIT + file LICENSE
+Encoding: UTF-8
+Roxygen: list(markdown = TRUE)
+RoxygenNote: 7.3.1
+Imports:
+    base64enc,
+    dplyr,
+    geosphere,
+    googlesheets4,
+    htmltools,
+    htmlwidgets,
+    leaflet,
+    osrm,
+    sf,
+    stats,
+    tibble,
+    tidygeocoder
