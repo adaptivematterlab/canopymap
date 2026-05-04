@@ -16,7 +16,7 @@ An R package for creating interactive Leaflet maps of organizations or other nod
 
 ```r
 # install.packages("remotes")
-remotes::install_github("your-username/canopymap")
+remotes::install_github("adaptivematterlab/canopymap")
 ```
 
 ## Quick start
