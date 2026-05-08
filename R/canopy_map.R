@@ -18,6 +18,7 @@
 #' @param route_color Color of route lines as a hex string.
 #' @param route_opacity Opacity of route lines (0–1).
 #' @param route_weight Weight of route lines in pixels.
+#' @param dark Load the map in dark mode by default. Can be toggled in the UI.
 #' @return A `leaflet` map object.
 #' @export
 canopy_map <- function(
@@ -40,7 +41,8 @@ canopy_map <- function(
   route_opacity        = 0.5,
   route_weight         = 2,
   clustering           = FALSE,
-  modality_labels      = NULL
+  modality_labels      = NULL,
+  dark                 = FALSE
 ) {
   data <- load_org_data(data_source, address_col)
 
@@ -88,6 +90,7 @@ canopy_map <- function(
     route_weight     = route_weight,
     category_col     = category_col,
     clustering       = clustering,
-    modality_labels  = as.list(modality_labels)
+    modality_labels  = as.list(modality_labels),
+    dark             = isTRUE(dark)
   )
 }

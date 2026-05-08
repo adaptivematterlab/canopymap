@@ -36,7 +36,7 @@ add_control_panel <- function(map, marker_data, light_colors, dark_colors,
                                routes_geojson, current_modality,
                                marker_radius, marker_opacity, marker_weight,
                                route_color, dark_route_color, route_opacity, route_weight,
-                               category_col, clustering, modality_labels) {
+                               category_col, clustering, modality_labels, dark = FALSE) {
   js_data <- list(
     markers         = marker_data,
     lightColors     = light_colors,
@@ -52,13 +52,14 @@ add_control_panel <- function(map, marker_data, light_colors, dark_colors,
     routeWeight     = route_weight,
     categoryCol     = category_col,
     clustering      = clustering,
-    modalityLabels  = modality_labels
+    modalityLabels  = modality_labels,
+    dark            = dark
   )
 
   htmlwidgets::onRender(map, "
     function(el, x, data) {
       var map             = this;
-      var isDark          = false;
+      var isDark          = !!data.dark;
       var lightColors     = data.lightColors  || {};
       var darkColors      = data.darkColors   || {};
       var hasColors       = Object.keys(lightColors).length > 0;
@@ -85,7 +86,7 @@ add_control_panel <- function(map, marker_data, light_colors, dark_colors,
       map.eachLayer(function(layer) {
         if (layer instanceof L.TileLayer) { map.removeLayer(layer); }
       });
-      lightTile.addTo(map);
+      if (isDark) { darkTile.addTo(map); } else { lightTile.addTo(map); }
 
       // ── Inject CSS ─────────────────────────────────────────────────────
       var sliderStyle = document.createElement('style');
@@ -99,12 +100,11 @@ add_control_panel <- function(map, marker_data, light_colors, dark_colors,
         ].join('') : '';
       }
 
+      map.zoomControl.setPosition('topright');
+
       var style = document.createElement('style');
       style.textContent = [
         '.canopy-tip { font-size:13px; padding:6px; }',
-        '.leaflet-top.leaflet-left { display:flex; flex-direction:column; align-items:flex-start; gap:5px; }',
-        '.leaflet-top.leaflet-left .leaflet-control-zoom { order:2; }',
-        '.leaflet-top.leaflet-left .canopy-panel { order:1; }',
         '.leaflet-control-zoom { box-shadow:none !important; border:1px solid rgba(0,0,0,0.2) !important; border-radius:4px !important; }',
         '.leaflet-control-zoom a { background:white; color:#333; border-bottom:1px solid rgba(0,0,0,0.1); line-height:26px; }',
         '.leaflet-control-zoom a:last-child { border-bottom:none; }'
@@ -347,9 +347,13 @@ add_control_panel <- function(map, marker_data, light_colors, dark_colors,
         var modalList = document.getElementById('cp-modality-list');
         var modalLabel = document.getElementById('cp-modality-label');
 
-        if (darkCb) darkCb.addEventListener('change', function() {
-          toggleDarkMode(this.checked);
-        });
+        if (darkCb) {
+          darkCb.checked = isDark;
+          darkCb.addEventListener('change', function() {
+            toggleDarkMode(this.checked);
+          });
+        }
+        if (isDark) { applyDarkStyles(true); updateColors(); }
         if (sizeSl) sizeSl.addEventListener('input', function() {
           currentRadius = parseInt(this.value);
           sizeVal.textContent = currentRadius;
