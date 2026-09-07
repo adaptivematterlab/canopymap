@@ -1,6 +1,7 @@
 #' Create an interactive organization map
 #'
 #' @param data_source A Google Sheets URL or a data frame.
+#' @param source_type "public" or "private" for different Google Sheets retrieval methods.
 #' @param address_col Name of the column containing addresses.
 #' @param name_col Name of the column containing organization names.
 #' @param category_col Name of the column to color-code markers by. `NULL` for no color-coding.
@@ -23,6 +24,7 @@
 #' @export
 canopy_map <- function(
   data_source,
+  source_type, 
   address_col          = "Address",
   name_col             = "Name",
   category_col         = "Category",
@@ -44,7 +46,7 @@ canopy_map <- function(
   modality_labels      = NULL,
   dark                 = FALSE
 ) {
-  data <- load_org_data(data_source, address_col)
+  data <- load_org_data(data_source, source_type, address_col)
 
   # Pre-compute route GeoJSON for every requested non-none modality
   routes_geojson <- list()

@@ -1,8 +1,14 @@
-load_org_data <- function(data_source, address_col) {
+load_org_data <- function(data_source, source_type, address_col) {
   if (is.character(data_source)) {
-    message("Loading data from Google Sheets...")
-    googlesheets4::gs4_deauth()
-    data <- googlesheets4::read_sheet(data_source)
+    if (source_type == "public") {
+      message("Loading public data from Google Sheets...")
+      googlesheets4::gs4_deauth()
+      data <- googlesheets4::read_sheet(data_source)
+    } else if (source_type == "private") {
+      message("Loading private data from Google Sheets...")
+      googlesheets4::gs4_auth()
+      data <- googlesheets4::read_sheet(data_source)       
+    }
   } else {
     data <- data_source
   }
