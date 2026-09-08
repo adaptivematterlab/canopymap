@@ -5,12 +5,14 @@ An R package for creating interactive Leaflet maps of organizations or other nod
 ## Features
 
 - **Data from anywhere** — pass a Google Sheets URL or a local data frame
-- **Automatic geocoding** — addresses are geocoded via OpenStreetMap (no API key required)
+- **Automatic geocoding** — addresses are geocoded via OpenStreetMap (no API key required), with results cached to disk between runs; sheets with existing `Latitude`/`Longitude` columns skip geocoding entirely
 - **Routing modes** — connect nearest neighbors by straight-line distance (Haversine) or road network (driving, cycling, walking) via the public OSRM API
+- **Neighborhoods view** — a density-based (DBSCAN) alternative to the connections view, showing walkable clusters of organizations as circles, with isolated organizations shown as hollow markers
 - **Category colors** — color-code markers by any column, with separate palettes for light and dark mode
+- **Category filtering** — one checkbox per category, with a color swatch and live count (e.g. `Garden (79)`); "All"/"None" links for bulk toggling. Filtering applies to the Sites view only — Connections and Neighborhoods are computed from the complete dataset, so their checkboxes are shown greyed out there, and the filter you set in Sites is remembered when you switch away and reapplied when you switch back
 - **Logo tooltips** — show organization logos and names on hover
 - **Click-to-website** — clicking a marker opens its website in a new tab
-- **Interactive controls** — dark mode, clustering, marker size, and routing modality can all be toggled live in the map UI
+- **Interactive controls** — dark mode, "Group nearby markers" (pixel-proximity clustering, independent from the Neighborhoods view), marker size, view (sites & connections vs. neighborhoods), category filtering, and routing modality can all be toggled live in the map UI
 
 ## Installation
 
@@ -18,6 +20,22 @@ An R package for creating interactive Leaflet maps of organizations or other nod
 # install.packages("remotes")
 remotes::install_github("adaptivematterlab/canopymap")
 ```
+
+## Basemap
+
+Maps are rendered on CARTO's Positron (light) and Dark Matter (dark) tiles. CARTO's basemap tiles are free but now require an API key (free tier: 5 million tile requests/month). Get one at [carto.com/basemaps/apikey](https://carto.com/basemaps/apikey/) and make it available via the `CARTO_API_KEY` environment variable, e.g. in `.Renviron`:
+
+```
+CARTO_API_KEY=your-key-here
+```
+
+or for the current session only:
+
+```r
+Sys.setenv(CARTO_API_KEY = "your-key-here")
+```
+
+Without a key, the map will still render, but the tiles will show CARTO's "API KEY REQUIRED" watermark.
 
 ## Quick start
 
@@ -48,6 +66,10 @@ canopy_map(
   available_modalities = c("none", "haversine", "driving"),
   modality_labels      = c(none = "None", haversine = "Shortest Distance", driving = "Roads"),
   n_neighbors          = 3,
+  max_edge_km          = 2,                # drop connection edges longer than this
+  limit                = NULL,             # process only the first N rows (testing)
+  cluster_eps          = 500,              # neighborhood radius in metres for the cluster layer
+  cluster_min_pts      = 3,                # minimum rows to form a cluster
   logo_dir             = "path/to/logos",  # PNGs named <Name>.png; NULL to disable
   light_palette        = "Set2",           # RColorBrewer palette for light mode
   dark_palette         = "Dark2",          # RColorBrewer palette for dark mode
@@ -75,6 +97,10 @@ canopy_map(
 | `available_modalities` | same as `modality` | Modalities to pre-compute; enables live switching in the UI |
 | `modality_labels` | `NULL` | Named vector of display labels, e.g. `c(driving = "Roads")` |
 | `n_neighbors` | `3` | Number of nearest neighbors to connect per node |
+| `max_edge_km` | `2` | Maximum connection edge length in km; longer edges are dropped |
+| `limit` | `NULL` | Process only the first N rows, applied before geocoding; `NULL` processes everything |
+| `cluster_eps` | `500` | Neighborhood radius in metres for the Neighborhoods (DBSCAN) cluster layer |
+| `cluster_min_pts` | `3` | Minimum rows required to form a cluster |
 | `logo_dir` | `NULL` | Path to directory of `<Name>.png` logo files |
 | `light_palette` | `"Set2"` | RColorBrewer palette for light mode |
 | `dark_palette` | `"Dark2"` | RColorBrewer palette for dark mode |
@@ -85,7 +111,7 @@ canopy_map(
 | `dark_route_color` | `"#aaaaaa"` | Route line color in dark mode |
 | `route_opacity` | `0.5` | Route line opacity (0–1) |
 | `route_weight` | `2` | Route line width in pixels |
-| `clustering` | `FALSE` | Whether to start with marker clustering enabled |
+| `clustering` | `FALSE` | Whether to start with marker clustering enabled (the "Group nearby markers" toggle in the UI) |
 
 ## Routing modalities
 
@@ -107,10 +133,14 @@ The minimum required columns are an address column and a name column. All other 
 |--------|---------|
 | Address | Street address for geocoding |
 | Name | Display name; also used to match logo files |
-| Category | Used for color-coding markers |
+| Category | Used for color-coding and filtering markers |
 | Website | Opened when a marker is clicked |
+| Latitude, Longitude | If both are present, geocoding is skipped entirely |
+| Geo Precision | If present, used instead of the address-based heuristic to decide which rows are precise enough to include in the Neighborhoods cluster layer |
 
-Column names are fully configurable via the `*_col` parameters.
+Column names are fully configurable via the `*_col` parameters (except `Latitude`/`Longitude`/`Geo Precision`, which are matched by exact name).
+
+Geocoded results are cached to `data/geocode-cache.rds`, keyed by address, so repeated renders don't re-query Nominatim for addresses already resolved.
 
 ## Logos
 

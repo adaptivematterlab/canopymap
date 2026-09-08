@@ -32,26 +32,79 @@ compute_osrm <- function(data, profile) {
   options(osrm.server = "https://router.project-osrm.org/")
   options(osrm.profile = profile)
 
-  dm <- osrm::osrmTable(src = coords_sf, measure = "distance")$distances / 1000
-  du <- osrm::osrmTable(src = coords_sf, measure = "duration")$durations
+  n <- nrow(data)
+  store <- new.env()
+  store$distances <- matrix(NA_real_, n, n)
+  store$durations <- matrix(NA_real_, n, n)
+  osrm_table_fill(coords_sf, seq_len(n), seq_len(n), store)
 
-  list(distance_km = dm, duration_min = du)
+  list(distance_km = store$distances / 1000, duration_min = store$durations)
 }
 
-find_edges <- function(dist_matrix, n) {
+# The public OSRM server caps the number of source x destination coordinates
+# per table request ("TooBig" / "Too many table coordinates"). Rather than
+# hard-coding that limit, request the full table and, on failure, recursively
+# split the larger of the two coordinate sets in half and retry -- this also
+# works unchanged against self-hosted servers with a different (or no) cap.
+osrm_table_fill <- function(coords_sf, src_idx, dst_idx, store) {
+  result <- tryCatch(
+    osrm::osrmTable(src = coords_sf[src_idx, ], dst = coords_sf[dst_idx, ], measure = c("duration", "distance")),
+    error = function(e) e
+  )
+  if (!inherits(result, "error")) {
+    store$distances[src_idx, dst_idx] <- result$distances
+    store$durations[src_idx, dst_idx] <- result$durations
+    return(invisible())
+  }
+  if (!grepl("TooBig", conditionMessage(result), fixed = TRUE) ||
+      (length(src_idx) == 1 && length(dst_idx) == 1)) {
+    stop(result)
+  }
+  message("  OSRM table request too large; splitting into smaller batches...")
+  if (length(src_idx) >= length(dst_idx) && length(src_idx) > 1) {
+    mid <- length(src_idx) %/% 2
+    osrm_table_fill(coords_sf, src_idx[seq_len(mid)], dst_idx, store)
+    osrm_table_fill(coords_sf, src_idx[-seq_len(mid)], dst_idx, store)
+  } else {
+    mid <- length(dst_idx) %/% 2
+    osrm_table_fill(coords_sf, src_idx, dst_idx[seq_len(mid)], store)
+    osrm_table_fill(coords_sf, src_idx, dst_idx[-seq_len(mid)], store)
+  }
+}
+
+find_edges <- function(dist_matrix, n, coords, max_edge_km = NULL) {
   message("Finding top ", n, " neighbors per node...")
-  edges <- vector("list", nrow(dist_matrix) * n)
+
+  # Co-located rows (identical long/lat) share a "location"; neighbors are
+  # found between locations, not between rows, so stacked addresses don't
+  # spend all their edges on each other at distance zero.
+  coord_key      <- paste(coords[, 1], coords[, 2])
+  uniq_keys      <- unique(coord_key)
+  representative <- match(uniq_keys, coord_key)
+  loc_dist       <- dist_matrix[representative, representative, drop = FALSE]
+
+  edges <- vector("list", length(uniq_keys) * n)
   idx <- 1
-  for (i in seq_len(nrow(dist_matrix))) {
-    distances <- dist_matrix[i, ]
-    distances[i] <- Inf
+  for (li in seq_along(uniq_keys)) {
+    distances <- loc_dist[li, ]
+    distances[li] <- Inf
     nearest <- order(distances)[seq_len(min(n, length(distances) - 1))]
-    for (j in nearest) {
-      edges[[idx]] <- tibble::tibble(from = i, to = j, distance_km = dist_matrix[i, j])
+    for (lj in nearest) {
+      # NA distances come from rows whose coordinates failed to geocode;
+      # skip them (along with self, Inf) rather than erroring on the comparison below.
+      d <- distances[lj]
+      if (!is.finite(d)) next
+      if (!is.null(max_edge_km) && d > max_edge_km) next
+      edges[[idx]] <- tibble::tibble(from = representative[li], to = representative[lj], distance_km = d)
       idx <- idx + 1
     }
   }
-  edges <- dplyr::bind_rows(edges)
+  empty_edges <- tibble::tibble(from = integer(0), to = integer(0), distance_km = numeric(0))
+  edges <- if (idx == 1) empty_edges else dplyr::bind_rows(edges[seq_len(idx - 1)])
+  if (nrow(edges) == 0) {
+    message("Found 0 unique edges.")
+    return(edges)
+  }
   edges <- dplyr::mutate(edges, key = paste(pmin(from, to), pmax(from, to)))
   edges <- dplyr::distinct(edges, key, .keep_all = TRUE)
   edges <- dplyr::select(edges, -key)
